@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/runway-templates/schema/refs/heads/main/v1alpha1.json
+apiVersion: schema.runway.horse/templates/v1alpha1
+kind: Template
+
+metadata:
+  name: memcached
+  version: 0.1.0
+  displayName: Memcached
+  description: |
+    In-memory key-value cache. Simple, fast, and multi-threaded. Single
+    instance, no persistence: a restart empties the cache. No login, so it
+    is not reachable from the internet.
+  category: cache
+  tags: [memcached, cache, kv, oss]
+  logo: ./logo.svg
+  documentation: https://docs.memcached.org
+  website: https://memcached.org
+  source: https://github.com/memcached/memcached
+  license: BSD-3-Clause
+  maintainer: runway
+
+inputs:
+  image_tag:
+    type: string
+    default: "1.6.45-alpine"
+    enum:
+      - "1.6.45-alpine"
+      - "1.6.45-trixie"
+    description: Memcached version. Nothing is kept on disk, so any change is safe.
+
+  memory_mb:
+    type: integer
+    default: 64
+    min: 16
+    max: 65536
+    description: |
+      Cache size in MB. Keep it well below the plan's RAM: memcached needs
+      extra room for connections and its own overhead. 64 fits the free plan.
+
+  max_connections:
+    type: integer
+    default: 1024
+    min: 16
+    max: 65536
+    description: Max open client connections. Each one costs a little memory.
+
+services:
+  - name: memcached
+    image: "r.planetary-quantum.com/docker-hub-proxy/library/memcached:${{ inputs.image_tag }}"
+
+    args:
+      - memcached
+      - --memory-limit
+      - "${{ inputs.memory_mb }}"
+      - --conn-limit
+      - "${{ inputs.max_connections }}"
+      - --port
+      - "11211"
+      # UDP is off by default; keep it explicit.
+      - --udp-port
+      - "0"
+
+    env:
+      PORT: "11211"
+
+    outputs:
+      # host:port; most clients take no scheme.
+      DSN: "${{ runway.internal_address }}"
+
+    healthcheck:
+      type: tcp
+      initialDelaySeconds: 5
+      periodSeconds: 10
+
+    settings:
+      # No login and no TLS; only apps in your network can reach it.
+      route: false
+      # Memcached writes nothing to disk.
+      lockdown: true
+
+    minPlan: free-launch
